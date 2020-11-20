@@ -105,8 +105,8 @@ class ShopMediaScrapper:
 
         return output
     
-    def init(self):
-        print('[+] Running...')
+    def start_scraping(self):
+        print('[+] Scraping started...')
 
         with open(self.STORE_FILE_NAME) as input_file, open(self.OUTPUT_FILE_NAME, 'w') as output_file:
             # reader works as iterator. Efficient.
@@ -143,4 +143,4 @@ class ShopMediaScrapper:
 
 if __name__ == '__main__':
     scraper = ShopMediaScrapper()
-    scraper.init()
+    scraper.start_scraping()
