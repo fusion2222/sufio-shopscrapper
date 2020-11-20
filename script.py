@@ -1,4 +1,3 @@
-from collections import OrderedDict
 import csv
 from json.decoder import JSONDecodeError
 import re
@@ -7,7 +6,6 @@ import requests
 
 
 class ShopMediaScrapper:
-    REQUEST_TIMEOUT = 5  # Seconds
     STORE_FILE_NAME = 'stores.csv'
     
     STORE_FILE_URL_COLUMN_NAME = 'url'
@@ -43,7 +41,7 @@ class ShopMediaScrapper:
 
     def scrape_shop_product_info(self, host):
         uri = f'http://{host}{self.PRODUCT_LIST_ENDPOINT}'
-        response = requests.get(uri, timeout=self.REQUEST_TIMEOUT)  # Redirections will be followed by default
+        response = requests.get(uri)  # Redirections will be followed by default
         
         output = {}
 
@@ -66,7 +64,7 @@ class ShopMediaScrapper:
 
             if not shop_is_productless:
                 product_url = f'http://{host}{product_link}.json'
-                response = requests.get(product_url, timeout=self.REQUEST_TIMEOUT) # Redirections will be followed by default
+                response = requests.get(product_url) # Redirections will be followed by default
                 if response.status_code != 200:
                     print(f'ERROR: Product {product_url} has no JSON data available')
                 else:
@@ -88,7 +86,7 @@ class ShopMediaScrapper:
         
         for endpoint in self.SCRAPING_ENDPOINTS:
             uri = f'http://{host}{endpoint}'
-            response = requests.get(uri, timeout=self.REQUEST_TIMEOUT) # Redirections will be followed by default
+            response = requests.get(uri) # Redirections will be followed by default
 
             if response.status_code != 200:
                 print(f'[+] NOTICE: Endpoint {uri} returns status code {response.status_code}')
@@ -129,8 +127,7 @@ class ShopMediaScrapper:
             for line in input_reader:
                 shop_host = line[url_column_index]
 
-                single_shop_output = OrderedDict()
-                single_shop_output['shop_url'] = shop_host
+                single_shop_output = {'shop_url': shop_host}
                 single_shop_output.update(
                     self.scrape_shop_contact_info(shop_host)
                 )
