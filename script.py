@@ -10,6 +10,8 @@ import requests
 class ShopMediaScrapper:
     STORE_FILE_NAME = 'stores.csv'
     
+    MAX_REQUEST_TIMEOUT = 15  # Seconds
+
     STORE_FILE_URL_COLUMN_NAME = 'url'
     SCRAPING_ENDPOINTS = (
         '/',
@@ -43,12 +45,16 @@ class ShopMediaScrapper:
 
     def scrape_shop_product_info(self, host):
         uri = f'http://{host}{self.PRODUCT_LIST_ENDPOINT}'
-        response = requests.get(uri)  # Redirections will be followed by default
-        
         output = {}
 
+        try:
+            response = requests.get(uri, timeout=self.MAX_REQUEST_TIMEOUT)  # Redirections will be followed by default
+        except requests.exceptions.ConnectionError:
+            print(f'\033[93m[+] ERROR: Endpoint {uri} takes too long to respond. Skipping...\033[0m')
+            return output
+
         if response.status_code != 200:
-            print(f'[+] ERROR: Endpoint {uri} returns status code {response.status_code}')
+            print(f'\033[93m[+] ERROR: Endpoint {uri} returns status code {response.status_code}. Skipping...\033[0m')
             return output
         
         # If shop would have the same product displayed twice, then ignore it and
@@ -59,22 +65,30 @@ class ShopMediaScrapper:
         shop_is_productless = not product_links
 
         if shop_is_productless:
-            print(f'[+] ERROR: {host} has no products!')
+            print(f'\033[93m[+] ERROR: {host} has no products!\033[0m')
         
         for i, product_link in enumerate(product_links):
             title, image = None, None
 
             if not shop_is_productless:
                 product_url = f'http://{host}{product_link}.json'
-                response = requests.get(product_url) # Redirections will be followed by default
-                if response.status_code != 200:
-                    print(f'ERROR: Product {product_url} has no JSON data available')
-                else:
+                
+                try:
+                    # Redirections will be followed by default
+                    response = requests.get(product_url, timeout=self.MAX_REQUEST_TIMEOUT)
+                except requests.exceptions.ConnectionError:
+                    response = None
+                    print(f'\033[93mERROR: {product_url} takes too long to respond. Skipping...\033[0m')
+
+                if response is not None:
+                    if response.status_code != 200:
+                        print(f'\033[93mERROR: Product {product_url} has no JSON data available\033[0m')
+                
                     try:
                         title = response.json()['product']['title']
                         image = response.json()['product']['image']['src']
                     except (JSONDecodeError, TypeError, KeyError):
-                        print(f'[+] {product_url} is not a valid JSON')
+                        print(f'\033[93m[+] ERROR: {product_url} is not a valid or properly formatted JSON\033[0m')
 
             output[f'product_{i}_title'] = title 
             output[f'product_{i}_img_src'] = image
@@ -122,7 +136,12 @@ class ShopMediaScrapper:
         
         for endpoint in self.SCRAPING_ENDPOINTS:
             uri = f'http://{host}{endpoint}'
-            response = requests.get(uri) # Redirections will be followed by default
+            try:
+                # Redirections will be followed by default
+                response = requests.get(uri, timeout=self.MAX_REQUEST_TIMEOUT) 
+            except requests.exceptions.ConnectionError:
+                print(f'\033[93m[+] ERROR: Endpoint {uri} takes too long to respond. Skipping\033[0m')
+                continue
 
             if response.status_code != 200:
                 print(f'[+] NOTICE: Endpoint {uri} returns status code {response.status_code}')
@@ -172,6 +191,7 @@ class ShopMediaScrapper:
                 print(f"\033[92m[+] Shop {shop_host} has been exported succesfully.\033[0m")
                 output_writer.writerow(single_shop_output)
 
+        print(f"\033[92m[+] Done.\033[0m")
 
 if __name__ == '__main__':
     scraper = ShopMediaScrapper()
