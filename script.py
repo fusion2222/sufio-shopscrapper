@@ -1,6 +1,8 @@
 import csv
 from json.decoder import JSONDecodeError
+import random
 import re
+from urllib.parse import unquote
 
 import requests
 
@@ -19,8 +21,8 @@ class ShopMediaScrapper:
 
     PRODUCT_LIST_ENDPOINT = '/collections/all'
     
-    SCRAPING_REGEX_TWITTER = re.compile(r"https?:\/\/(www\.)?twitter\.com\/[a-zA-Z0-9-._]*")
-    SCRAPING_REGEX_FACEBOOK = re.compile(r"https?:\/\/(www\.)?facebook\.com\/[a-zA-Z0-9-._]*")
+    SCRAPING_REGEX_TWITTER = re.compile(r"https?:\/\/(?:www\.)?twitter\.com\/[a-zA-Z0-9-._]*")
+    SCRAPING_REGEX_FACEBOOK = re.compile(r"https?:\/\/(?:www\.)?facebook\.com\/[a-zA-Z0-9-._]*")
     SCRAPING_REGEX_EMAIL = re.compile(r"[a-z0-9-.]+@[a-z.]+")
     SCRAPING_REGEX_PRODUCT = re.compile(r"/collections/all/products/[^\"]+")
 
@@ -79,10 +81,44 @@ class ShopMediaScrapper:
 
         return output
 
+    def _select_accurate_socials(self, socials_list, host):
+        """
+        Shop page could scrape incorrect Social media links. Now we have
+        to pick up the most probable, valid Social media links. If scraped
+        links will have some similarity with hostname, they will score higher.
+
+        The link with the highest amount of score will be considered the most
+        accurate and returned.
+        """
+
+        scoring_words = host[:host.find('.')].split('-')
+        score_dict = {}
+
+        # Removes duplicates. So we dont iterate the same thing over and over.
+        unique_socials = set(socials_list) 
+
+        for social_media_link in socials_list:
+            score = 0
+            sanitized_social_media_link = unquote(social_media_link).strip().lower()
+            for scoring_word in scoring_words:
+                if sanitized_social_media_link.find(scoring_word) > -1:
+                    score += 1
+                
+            if score not in score_dict:
+                score_dict[score] = []
+
+            score_dict[score].append(social_media_link)
+            
+        if not score_dict:
+            return None
+        else:
+            # These scored the most. If there are more than one
+            # winners, select one randomly and return it.
+            winners = score_dict[max(score_dict.keys())]
+            return winners[random.randint(0, len(winners) - 1)]
 
     def scrape_shop_contact_info(self, host):
-        output = {key: None for key in self.STORE_INFO_REGEXES.keys()}
-        queue = list(output.keys())
+        output = {key: [] for key in self.STORE_INFO_REGEXES.keys()}
         
         for endpoint in self.SCRAPING_ENDPOINTS:
             uri = f'http://{host}{endpoint}'
@@ -92,16 +128,13 @@ class ShopMediaScrapper:
                 print(f'[+] NOTICE: Endpoint {uri} returns status code {response.status_code}')
                 continue
             
-            for key in queue:
-                found = self.STORE_INFO_REGEXES[key].search(response.text)
+            for key, rgx in self.STORE_INFO_REGEXES.items():
+                found = rgx.findall(response.text)
                 if found is not None:
-                    output[key] = found.string[
-                        found.start():found.end()
-                    ]
-                    queue.remove(key)
-
-            if not queue:
-                break
+                    output[key].extend(found)
+        
+        for key, scraped_socials in output.items():
+            output[key] = self._select_accurate_socials(scraped_socials, host)
 
         return output
     
@@ -138,7 +171,6 @@ class ShopMediaScrapper:
                 # Wierd signs are because of green text output!
                 print(f"\033[92m[+] Shop {shop_host} has been exported succesfully.\033[0m")
                 output_writer.writerow(single_shop_output)
-
 
 
 if __name__ == '__main__':
